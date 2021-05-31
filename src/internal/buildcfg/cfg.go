@@ -102,6 +102,7 @@ func goppc64() int {
 type gowasmFeatures struct {
 	SignExt bool
 	SatConv bool
+	Threads bool
 }
 
 func (f gowasmFeatures) String() string {
@@ -111,6 +112,9 @@ func (f gowasmFeatures) String() string {
 	}
 	if f.SignExt {
 		flags = append(flags, "signext")
+	}
+	if f.Threads {
+		flags = append(flags, "threads")
 	}
 	return strings.Join(flags, ",")
 }
@@ -122,6 +126,8 @@ func gowasm() (f gowasmFeatures) {
 			f.SatConv = true
 		case "signext":
 			f.SignExt = true
+		case "threads":
+			f.Threads = true
 		case "":
 			// ignore
 		default:

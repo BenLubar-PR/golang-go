@@ -600,7 +600,7 @@ Architecture-specific environment variables:
 		Valid values are hardfloat (default), softfloat.
 	GOWASM
 		For GOARCH=wasm, comma-separated list of experimental WebAssembly features to use.
-		Valid values are satconv, signext.
+		Valid values are satconv, signext, threads.
 
 Special-purpose environment variables:
 

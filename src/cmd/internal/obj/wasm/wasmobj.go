@@ -1104,9 +1104,15 @@ func writeOpcode(w *bytes.Buffer, as obj.As) {
 		w.WriteByte(byte(as - ALocalGet + 0x20))
 	case as < AI32TruncSatF32S:
 		w.WriteByte(byte(as - AI32Load + 0x28))
-	case as < ALast:
+	case as < AMemoryAtomicNotify:
 		w.WriteByte(0xFC)
 		w.WriteByte(byte(as - AI32TruncSatF32S + 0x00))
+	case as < AI32AtomicLoad:
+		w.WriteByte(0xFE)
+		w.WriteByte(byte(as - AMemoryAtomicNotify + 0x00))
+	case as < ALast:
+		w.WriteByte(0xFE)
+		w.WriteByte(byte(as - AI32AtomicLoad + 0x10))
 	default:
 		panic(fmt.Sprintf("unexpected assembler op: %s", as))
 	}
