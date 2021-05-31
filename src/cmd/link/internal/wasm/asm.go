@@ -327,21 +327,20 @@ func writeMemorySec(ctxt *ld.Link, ldr *loader.Loader) {
 	dataSection := ldr.SymSect(ldr.Lookup("runtime.data", 0))
 	dataEnd := dataSection.Vaddr + dataSection.Length
 	var initialSize = dataEnd + 16<<20 // 16MB, enough for runtime init without growing
+	const maxSize = 4 << 30            // 4GB
 
 	const wasmPageSize = 64 << 10 // 64KB
 
-	if buildcfg.GOWASM.Threads {
-		const maxSize = 4 << 30 // 4GB
+	writeUleb128(ctxt.Out, 1) // number of memories
 
-		writeUleb128(ctxt.Out, 1)                        // number of memories
-		ctxt.Out.WriteByte(0x03)                         // use shared memory
-		writeUleb128(ctxt.Out, initialSize/wasmPageSize) // minimum (initial) memory size
-		writeUleb128(ctxt.Out, maxSize/wasmPageSize)     // maximum memory size
+	if buildcfg.GOWASM.Threads {
+		ctxt.Out.WriteByte(0x03) // use shared memory
 	} else {
-		writeUleb128(ctxt.Out, 1)                        // number of memories
-		ctxt.Out.WriteByte(0x00)                         // no maximum memory size
-		writeUleb128(ctxt.Out, initialSize/wasmPageSize) // minimum (initial) memory size
+		ctxt.Out.WriteByte(0x01) // use non-shared memory
 	}
+
+	writeUleb128(ctxt.Out, initialSize/wasmPageSize) // minimum (initial) memory size
+	writeUleb128(ctxt.Out, maxSize/wasmPageSize)     // maximum memory size
 
 	writeSecSize(ctxt, sizeOffset)
 }
