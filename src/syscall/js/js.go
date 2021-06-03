@@ -27,12 +27,6 @@ type ref uint64
 // nanHead are the upper 32 bits of a ref which are set if the value is not encoded as an IEEE 754 number (see above).
 const nanHead = 0x7FF80000
 
-// Wrapper is implemented by types that are backed by a JavaScript value.
-type Wrapper interface {
-	// JSValue returns a JavaScript value associated with an object.
-	JSValue() Value
-}
-
 // Value represents a JavaScript value. The zero value is the JavaScript value "undefined".
 // Values can be checked for equality with the Equal method.
 type Value struct {
@@ -49,11 +43,6 @@ const (
 	typeFlagSymbol
 	typeFlagFunction
 )
-
-// JSValue implements Wrapper interface.
-func (v Value) JSValue() Value {
-	return v
-}
 
 func makeValue(r ref) Value {
 	var gcPtr *ref
@@ -163,8 +152,8 @@ func ValueOf(x interface{}) Value {
 	switch x := x.(type) {
 	case Value: // should precede Wrapper to avoid a loop
 		return x
-	case Wrapper:
-		return x.JSValue()
+	case Func:
+		return x.Value
 	case nil:
 		return valueNull
 	case bool:
@@ -220,6 +209,7 @@ func ValueOf(x interface{}) Value {
 	}
 }
 
+//go:noescape
 func stringVal(x string) ref
 
 // Type represents the JavaScript type of a Value.
@@ -303,6 +293,7 @@ func (v Value) Get(p string) Value {
 	return r
 }
 
+//go:noescape
 func valueGet(v ref, p string) ref
 
 // Set sets the JavaScript property p of value v to ValueOf(x).
@@ -317,6 +308,7 @@ func (v Value) Set(p string, x interface{}) {
 	runtime.KeepAlive(xv)
 }
 
+//go:noescape
 func valueSet(v ref, p string, x ref)
 
 // Delete deletes the JavaScript property p of value v.
@@ -329,6 +321,7 @@ func (v Value) Delete(p string) {
 	runtime.KeepAlive(v)
 }
 
+//go:noescape
 func valueDelete(v ref, p string)
 
 // Index returns JavaScript index i of value v.
@@ -358,15 +351,27 @@ func (v Value) SetIndex(i int, x interface{}) {
 
 func valueSetIndex(v ref, i int, x ref)
 
-func makeArgs(args []interface{}) ([]Value, []ref) {
-	argVals := make([]Value, len(args))
-	argRefs := make([]ref, len(args))
+func storeArgs(args []interface{}, argValsDst []Value, argRefsDst []ref) {
 	for i, arg := range args {
 		v := ValueOf(arg)
-		argVals[i] = v
-		argRefs[i] = v.ref
+		argValsDst[i] = v
+		argRefsDst[i] = v.ref
 	}
-	return argVals, argRefs
+}
+
+// This function must be inlined
+func makeArgs(args []interface{}) (argVals []Value, argRefs []ref) {
+	const maxStackArgs = 16
+	if len(args) <= maxStackArgs {
+		// Allocated on the stack
+		argVals = make([]Value, len(args), maxStackArgs)
+		argRefs = make([]ref, len(args), maxStackArgs)
+	} else {
+		// Allocated on the heap
+		argVals = make([]Value, len(args))
+		argRefs = make([]ref, len(args))
+	}
+	return
 }
 
 // Length returns the JavaScript property "length" of v.
@@ -387,6 +392,7 @@ func valueLength(v ref) int
 // The arguments get mapped to JavaScript values according to the ValueOf function.
 func (v Value) Call(m string, args ...interface{}) Value {
 	argVals, argRefs := makeArgs(args)
+	storeArgs(args, argVals, argRefs)
 	res, ok := valueCall(v.ref, m, argRefs)
 	runtime.KeepAlive(v)
 	runtime.KeepAlive(argVals)
@@ -402,6 +408,7 @@ func (v Value) Call(m string, args ...interface{}) Value {
 	return makeValue(res)
 }
 
+//go:noescape
 func valueCall(v ref, m string, args []ref) (ref, bool)
 
 // Invoke does a JavaScript call of the value v with the given arguments.
@@ -409,6 +416,7 @@ func valueCall(v ref, m string, args []ref) (ref, bool)
 // The arguments get mapped to JavaScript values according to the ValueOf function.
 func (v Value) Invoke(args ...interface{}) Value {
 	argVals, argRefs := makeArgs(args)
+	storeArgs(args, argVals, argRefs)
 	res, ok := valueInvoke(v.ref, argRefs)
 	runtime.KeepAlive(v)
 	runtime.KeepAlive(argVals)
@@ -421,6 +429,7 @@ func (v Value) Invoke(args ...interface{}) Value {
 	return makeValue(res)
 }
 
+//go:noescape
 func valueInvoke(v ref, args []ref) (ref, bool)
 
 // New uses JavaScript's "new" operator with value v as constructor and the given arguments.
@@ -428,6 +437,7 @@ func valueInvoke(v ref, args []ref) (ref, bool)
 // The arguments get mapped to JavaScript values according to the ValueOf function.
 func (v Value) New(args ...interface{}) Value {
 	argVals, argRefs := makeArgs(args)
+	storeArgs(args, argVals, argRefs)
 	res, ok := valueNew(v.ref, argRefs)
 	runtime.KeepAlive(v)
 	runtime.KeepAlive(argVals)
@@ -440,6 +450,7 @@ func (v Value) New(args ...interface{}) Value {
 	return makeValue(res)
 }
 
+//go:noescape
 func valueNew(v ref, args []ref) (ref, bool)
 
 func (v Value) isNumber() bool {
@@ -539,8 +550,10 @@ func jsString(v Value) string {
 	return string(b)
 }
 
+//go:noescape
 func valuePrepareString(v ref) (ref, int)
 
+//go:noescape
 func valueLoadString(v ref, b []byte)
 
 // InstanceOf reports whether v is an instance of type t according to JavaScript's instanceof operator.
@@ -577,6 +590,7 @@ func CopyBytesToGo(dst []byte, src Value) int {
 	return n
 }
 
+//go:noescape
 func copyBytesToGo(dst []byte, src ref) (int, bool)
 
 // CopyBytesToJS copies bytes from src to dst.
@@ -591,4 +605,5 @@ func CopyBytesToJS(dst Value, src []byte) int {
 	return n
 }
 
+//go:noescape
 func copyBytesToJS(dst ref, src []byte) (int, bool)
